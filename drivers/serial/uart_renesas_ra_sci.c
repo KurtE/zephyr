@@ -267,8 +267,11 @@ static int uart_ra_sci_configure(const struct device *dev, const struct uart_con
 	fsp_err_t fsp_err;
 	struct uart_ra_sci_data *data = dev->data;
 
+	printk("uart_ra_sci_configure: %p %p %p\n", dev, config, data);
+
 	err = uart_ra_sci_apply_config(config, &data->fsp_config, &data->fsp_config_extend,
 				       &data->fsp_baud_setting);
+	printk("\tapply_config err:%d\n", err);
 	if (err) {
 		return err;
 	}
@@ -279,6 +282,7 @@ static int uart_ra_sci_configure(const struct device *dev, const struct uart_con
 		LOG_DBG("drivers: serial: uart configure failed");
 		return -EIO;
 	}
+	printk("\tbefore memcpy\n");
 	memcpy(&data->uart_config, config, sizeof(*config));
 
 	return 0;
