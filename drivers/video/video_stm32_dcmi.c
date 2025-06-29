@@ -70,6 +70,12 @@ void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi)
 
 	vbuf = k_fifo_get(&dev_data->fifo_in, K_NO_WAIT);
 
+#ifdef CONFIG_VIDEO_BUFFER_POOL_REUSE_OLDEST
+	if (vbuf == NULL) {
+		vbuf = k_fifo_get(&dev_data->fifo_out, K_NO_WAIT);
+	}
+#endif
+
 	if (vbuf == NULL) {
 		LOG_DBG("Failed to get buffer from fifo");
 		goto resume;
