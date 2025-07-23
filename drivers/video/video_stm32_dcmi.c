@@ -45,6 +45,7 @@ struct video_stm32_dcmi_data {
 	struct k_fifo fifo_in;
 	struct k_fifo fifo_out;
 	struct video_buffer *vbuf;
+	volatile bool snapshot_active;
 };
 
 struct video_stm32_dcmi_config {
@@ -66,7 +67,16 @@ void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi)
 			CONTAINER_OF(hdcmi, struct video_stm32_dcmi_data, hdcmi);
 	struct video_buffer *vbuf;
 
+	if (dev_data->snapshot_active) {
+		dev_data->snapshot_active = false;
+		return;
+	}
 	HAL_DCMI_Suspend(hdcmi);
+
+	if ((dev_data->vbuf == NULL) || (dev_data->vbuf->buffer == NULL)) {
+		LOG_DBG("NULL buffer");
+		return;
+	}
 
 	vbuf = k_fifo_get(&dev_data->fifo_in, K_NO_WAIT);
 
@@ -417,6 +427,58 @@ static int video_stm32_dcmi_get_frmival(const struct device *dev, struct video_f
 	return 0;
 }
 
+static int video_stm32_dcmi_set_selection(const struct device *dev, struct video_selection *sel)
+{
+	const struct video_stm32_dcmi_config *config = dev->config;
+	return video_set_selection(config->sensor_dev, sel);
+}
+
+static int video_stm32_dcmi_get_selection(const struct device *dev, struct video_selection *sel)
+{
+	const struct video_stm32_dcmi_config *config = dev->config;
+	return video_get_selection(config->sensor_dev, sel);
+}
+
+static int video_stm32_dcmi_capture_snapshot(const struct device *dev, void *buffer, size_t buffer_size, k_timeout_t timeout)
+{
+	struct video_stm32_dcmi_data *data = dev->data;
+	const struct video_stm32_dcmi_config *config = dev->config;
+    
+    // Start the Camera Snapshot Capture.
+	data->hdcmi.Instance->CR &= ~(DCMI_CR_FCRC_0 | DCMI_CR_FCRC_1);
+	data->hdcmi.Instance->CR |= STM32_DCMI_GET_CAPTURE_RATE(data->capture_rate);
+
+	data->snapshot_active = true;
+    if (HAL_DCMI_Start_DMA(&data->hdcmi, DCMI_MODE_SNAPSHOT,
+                (uint32_t) buffer, buffer_size / 4) != HAL_OK) {
+		LOG_WRN("Snapshot: HAL_DCMI_Start_DMA FAILED!");
+		return -EIO;
+    }
+
+	video_stream_start(config->sensor_dev, VIDEO_BUF_TYPE_OUTPUT);
+    // Wait until camera frame is ready.
+
+    for (int64_t start_time = k_uptime_get(); data->snapshot_active == true;) {
+        __WFI();
+        if (k_uptime_delta(&start_time) > timeout.ticks) {
+			LOG_DBG("Timeout expired!");
+	        HAL_DCMI_Stop(&data->hdcmi);
+        	return -EIO;
+        }
+    }
+	video_stream_stop(config->sensor_dev, VIDEO_BUF_TYPE_OUTPUT);
+
+    HAL_DCMI_Stop(&data->hdcmi);
+
+    #if defined(__CORTEX_M7)  // only invalidate buffer for Cortex M7
+    // Invalidate buffer after DMA transfer.
+    SCB_InvalidateDCache_by_Addr((uint32_t*) framebuffer, framesize);
+    #endif
+    return 0;
+
+}
+
+
 static DEVICE_API(video, video_stm32_dcmi_driver_api) = {
 	.set_format = video_stm32_dcmi_set_fmt,
 	.get_format = video_stm32_dcmi_get_fmt,
@@ -427,6 +489,9 @@ static DEVICE_API(video, video_stm32_dcmi_driver_api) = {
 	.enum_frmival = video_stm32_dcmi_enum_frmival,
 	.set_frmival = video_stm32_dcmi_set_frmival,
 	.get_frmival = video_stm32_dcmi_get_frmival,
+	.set_selection = video_stm32_dcmi_set_selection,
+	.get_selection = video_stm32_dcmi_get_selection,
+	.capture_snapshot = video_stm32_dcmi_capture_snapshot,
 };
 
 static void video_stm32_dcmi_irq_config_func(const struct device *dev)

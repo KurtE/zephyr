@@ -706,10 +706,18 @@ static const struct video_reg8 default_regs[] = {
 	{0x46, 0xcf},
 
 	{GC2145_REG_RESET, GC2145_REG_RESET_P0_REGS},
+#if 1
+    {0x05, 0x01}, // hb  from teensy_camera
+    {0x06, 0x3b},
+    {0x07, 0x01}, // Vb
+    {0x08, 0x0b},
+
+#else	
 	{0x05, 0x01},
 	{0x06, 0x1C},
 	{0x07, 0x00},
 	{0x08, 0x32},
+#endif	
 	{0x11, 0x00},
 	{0x12, 0x1D},
 	{0x13, 0x00},
@@ -768,6 +776,7 @@ struct gc2145_ctrls {
 struct gc2145_data {
 	struct gc2145_ctrls ctrls;
 	struct video_format fmt;
+	struct video_rect clip_rect;
 };
 
 #define GC2145_VIDEO_FORMAT_CAP(width, height, format)                                             \
@@ -789,6 +798,12 @@ static const struct video_format_cap fmts[] = {
 	GC2145_VIDEO_FORMAT_CAP(RESOLUTION_QVGA_W, RESOLUTION_QVGA_H, VIDEO_PIX_FMT_RGB565),
 	GC2145_VIDEO_FORMAT_CAP(RESOLUTION_VGA_W, RESOLUTION_VGA_H, VIDEO_PIX_FMT_RGB565),
 	GC2145_VIDEO_FORMAT_CAP(RESOLUTION_UXGA_W, RESOLUTION_UXGA_H, VIDEO_PIX_FMT_RGB565),
+	/* Add some full size possible resolutions */
+	GC2145_VIDEO_FORMAT_CAP(800, 600, VIDEO_PIX_FMT_RGB565),	/* div 2 */
+	GC2145_VIDEO_FORMAT_CAP(533, 400, VIDEO_PIX_FMT_RGB565),	/* div 3 */
+	GC2145_VIDEO_FORMAT_CAP(400, 300, VIDEO_PIX_FMT_RGB565),	/* div 4 */
+	GC2145_VIDEO_FORMAT_CAP(320, 240, VIDEO_PIX_FMT_RGB565),	/* div 5 */
+
 	GC2145_VIDEO_FORMAT_CAP(RESOLUTION_QVGA_W, RESOLUTION_QVGA_H, VIDEO_PIX_FMT_YUYV),
 	GC2145_VIDEO_FORMAT_CAP(RESOLUTION_VGA_W, RESOLUTION_VGA_H, VIDEO_PIX_FMT_YUYV),
 	GC2145_VIDEO_FORMAT_CAP(RESOLUTION_UXGA_W, RESOLUTION_UXGA_H, VIDEO_PIX_FMT_YUYV),
@@ -846,6 +861,8 @@ static int gc2145_set_output_format(const struct device *dev, int output_format)
 static int gc2145_set_resolution(const struct device *dev, uint32_t w, uint32_t h)
 {
 	const struct gc2145_config *cfg = dev->config;
+	struct gc2145_data *drv_data = dev->data;
+	struct video_rect *clip_rect = &drv_data->clip_rect;
 	int ret;
 
 	uint16_t win_w;
@@ -879,10 +896,18 @@ static int gc2145_set_resolution(const struct device *dev, uint32_t w, uint32_t 
 	/* Calculates the window boundaries to obtain the desired resolution */
 	win_w = w * c_ratio;
 	win_h = h * r_ratio;
-	x = (((win_w / c_ratio) - w) / 2);
-	y = (((win_h / r_ratio) - h) / 2);
 	win_x = ((UXGA_HSIZE - win_w) / 2);
 	win_y = ((UXGA_VSIZE - win_h) / 2);
+
+	x = (((win_w / c_ratio) - w) / 2);
+	y = (((win_h / r_ratio) - h) / 2);
+	if ((clip_rect->width != 0) && (clip_rect->height != 0) && 
+			(clip_rect->width <= win_w) && (clip_rect->height <= win_h) ) {
+		w = clip_rect->width;
+		h = clip_rect->height;
+		x = (clip_rect->left != (uint32_t)-1)? clip_rect->left : (((win_w / c_ratio) - w) / 2);
+		y = (clip_rect->top != (uint32_t)-1)? clip_rect->top : (((win_h / c_ratio) - h) / 2);
+	}
 
 	ret = video_write_cci_reg(&cfg->i2c, GC2145_REG8(GC2145_REG_RESET),
 				  GC2145_REG_RESET_P0_REGS);
@@ -1171,12 +1196,64 @@ static int gc2145_set_ctrl(const struct device *dev, uint32_t id)
 	}
 }
 
+static int gc2145_set_selection(const struct device *dev, struct video_selection *sel)
+{
+	printk("gc2145_set_selection(%p, %p: %u %u)\n", dev, sel, sel->type, sel->target);
+	if (sel->type != VIDEO_BUF_TYPE_OUTPUT) {
+		return -EINVAL;
+	}
+
+	struct gc2145_data *drv_data = dev->data;
+
+	switch (sel->target) {
+	case VIDEO_SEL_TGT_CROP:
+		drv_data->clip_rect = sel->rect;
+		return gc2145_set_resolution(dev, drv_data->fmt.width, drv_data->fmt.height);
+		break;
+
+	default:
+		return -EINVAL;
+	};
+
+	return 0;
+}
+
+static int gc2145_get_selection(const struct device *dev, struct video_selection *sel)
+{
+	printk("gc2145_get_selection(%p, %p: %u %u)\n", dev, sel, sel->type, sel->target);
+	if (sel->type != VIDEO_BUF_TYPE_OUTPUT) {
+		return -EINVAL;
+	}
+
+	struct gc2145_data *drv_data = dev->data;
+
+	switch (sel->target) {
+	case VIDEO_SEL_TGT_CROP:
+		sel->rect = drv_data->clip_rect;
+		break;
+
+	case VIDEO_SEL_TGT_NATIVE_SIZE:
+		sel->rect.top = 0;
+		sel->rect.left = 0;
+		sel->rect.width = drv_data->fmt.width;
+		sel->rect.height = drv_data->fmt.height;
+		break;
+	default:
+		return -EINVAL;
+	};
+
+	return 0;
+}
+
+
 static DEVICE_API(video, gc2145_driver_api) = {
 	.set_format = gc2145_set_fmt,
 	.get_format = gc2145_get_fmt,
 	.get_caps = gc2145_get_caps,
 	.set_stream = gc2145_set_stream,
 	.set_ctrl = gc2145_set_ctrl,
+	.set_selection = gc2145_set_selection,
+	.get_selection = gc2145_get_selection,
 };
 
 static int gc2145_init_controls(const struct device *dev)
@@ -1271,6 +1348,15 @@ static int gc2145_init(const struct device *dev)
 	if (ret < 0) {
 		return ret;
 	}
+
+	/* initialize clip rectangle */
+	struct gc2145_data *drv_data = dev->data;
+	drv_data->clip_rect.top = 0;
+	drv_data->clip_rect.left = 0;
+	drv_data->clip_rect.width = 0;
+	drv_data->clip_rect.height = 0;
+
+
 
 	ret = gc2145_set_fmt(dev, &fmt);
 	if (ret) {

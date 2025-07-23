@@ -390,6 +390,17 @@ typedef int (*video_api_set_signal_t)(const struct device *dev, struct k_poll_si
  */
 typedef int (*video_api_selection_t)(const struct device *dev, struct video_selection *sel);
 
+/**
+ * @typedef video_api_capture_snapshot_t
+ * @brief start, capture one frame and stop
+ *
+ * @param dev Pointer to the device structure.
+ * @param buffer Buffer to receive the frame.
+ * @param buffer_size size of the buffer in bytes.
+ * @param timeout Timout for frame to be received.
+ */
+typedef int (*video_api_capture_snapshot_t)(const struct device *dev, void *buffer, size_t buffer_size, k_timeout_t timeout);
+
 __subsystem struct video_driver_api {
 	/* mandatory callbacks */
 	video_api_format_t set_format;
@@ -408,6 +419,7 @@ __subsystem struct video_driver_api {
 	video_api_enum_frmival_t enum_frmival;
 	video_api_selection_t set_selection;
 	video_api_selection_t get_selection;
+	video_api_capture_snapshot_t capture_snapshot;
 };
 
 /**
@@ -884,6 +896,30 @@ static inline int video_get_selection(const struct device *dev, struct video_sel
 
 	return api->get_selection(dev, sel);
 }
+
+
+/**
+ * @brief start, capture one frame and stop
+ *
+ * @param dev Pointer to the device structure.
+ * @param buffer Buffer to receive the frame.
+ * @param buffer_size size of the buffer in bytes.
+ */
+static inline int video_capture_snapshot(const struct device *dev, void *buffer, size_t buffer_size, k_timeout_t timeout) 
+{	
+	const struct video_driver_api *api;
+
+	__ASSERT_NO_MSG(dev != NULL);
+	__ASSERT_NO_MSG(buffer != NULL);
+
+	api = (const struct video_driver_api *)dev->api;
+	if (api->capture_snapshot == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->capture_snapshot(dev, buffer, buffer_size, timeout);
+}
+
 
 /**
  * @brief Allocate aligned video buffer.

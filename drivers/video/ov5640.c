@@ -867,6 +867,7 @@ static int ov5640_set_fmt(const struct device *dev, struct video_format *fmt)
 	drv_data->fmt = *fmt;
 
 	/* Set resolution */
+	printk("Is DVP? %c\n", ov5640_is_dvp(dev)? 'y' :'n');
 	for (i = 0; i < array_size_modes; i++) {
 		if (fmt->width == modes[i].width && fmt->height == modes[i].height) {
 			ret = ov5640_write_multi_regs(&cfg->i2c, modes[i].res_params,
@@ -1324,10 +1325,18 @@ static int ov5640_init_controls(const struct device *dev)
 static int ov5640_init(const struct device *dev)
 {
 	const struct ov5640_config *cfg = dev->config;
-	struct video_format fmt = {0};
+	//struct video_format fmt = {0};
+	// make sure we have a setting.
+	struct video_format fmt = {
+		.pixelformat = VIDEO_PIX_FMT_RGB565,
+		.width = 320,
+		.height = 240,
+	};
+
 	uint16_t chip_id;
 	int ret;
 
+	LOG_INF("ov5640_init called");
 	if (!device_is_ready(cfg->i2c.bus)) {
 		LOG_ERR("Bus device is not ready");
 		return -ENODEV;
@@ -1370,7 +1379,7 @@ static int ov5640_init(const struct device *dev)
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(powerdown_gpios)
 	if (cfg->powerdown_gpio.port != NULL) {
-		gpio_pin_set_dt(&cfg->powerdown_gpio, 0);
+		gpio_pin_set_dt(&cfg->powerdown_gpio, 1);
 	}
 #endif
 
@@ -1449,6 +1458,7 @@ static int ov5640_init(const struct device *dev)
 		fmt.width = 1280;
 		fmt.height = 720;
 	}
+	LOG_INF("Set Default format: %u %u", fmt.width, fmt.height);
 	ret = ov5640_set_fmt(dev, &fmt);
 	if (ret) {
 		LOG_ERR("Unable to configure default format");
@@ -1480,8 +1490,10 @@ static int ov5640_init(const struct device *dev)
 		.i2c = I2C_DT_SPEC_INST_GET(n),                                                    \
 		OV5640_GET_RESET_GPIO(n)							   \
 		OV5640_GET_POWERDOWN_GPIO(n)							   \
-		.bus_type = DT_PROP_OR(DT_CHILD(DT_INST_CHILD(n, port), endpoint), bus_type,       \
-				       VIDEO_BUS_TYPE_CSI2_DPHY),                                  \
+		/*.bus_type = DT_PROP_OR(DT_CHILD(DT_INST_CHILD(n, port), endpoint), bus_type, */       \
+		/*		       VIDEO_BUS_TYPE_CSI2_DPHY), */                                 \
+		.bus_type = DT_PROP_OR(DT_INST_ENDPOINT_BY_ID(n, 0, 0), bus_type,		\
+				       VIDEO_BUS_TYPE_PARALLEL),				\
 	};                                                                                         \
                                                                                                    \
 	DEVICE_DT_INST_DEFINE(n, &ov5640_init, NULL, &ov5640_data_##n, &ov5640_cfg_##n,            \
