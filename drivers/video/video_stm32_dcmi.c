@@ -105,10 +105,13 @@ static void dcmi_dma_callback(const struct device *dev, void *arg, uint32_t chan
 {
 	DMA_HandleTypeDef *hdma = arg;
 
-	ARG_UNUSED(dev);
+	//ARG_UNUSED(dev);
 
 	if (status < 0) {
 		LOG_ERR("DMA callback error with channel %d.", channel);
+		/* See if we have active snaphost and clear it... */
+		struct video_stm32_dcmi_data *data = dev->data;
+		data->snapshot_active = false;
 	}
 
 	HAL_DMA_IRQHandler(hdma);
@@ -460,7 +463,7 @@ static int video_stm32_dcmi_capture_snapshot(const struct device *dev, void *buf
 
     for (int64_t start_time = k_uptime_get(); data->snapshot_active == true;) {
         __WFI();
-        if (k_uptime_delta(&start_time) > timeout.ticks) {
+        if ((k_uptime_get() - start_time) > timeout.ticks) {
 			LOG_DBG("Timeout expired!");
 	        HAL_DCMI_Stop(&data->hdcmi);
         	return -EIO;
