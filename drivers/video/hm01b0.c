@@ -43,6 +43,9 @@ enum hm01b0_resolution {
 	RESOLUTION_160x120,
 	RESOLUTION_320x240,
 	RESOLUTION_320x320,
+	RESOLUTION_160x120_44,
+	RESOLUTION_326x244_44,
+	RESOLUTION_320x320_44,
 };
 
 //#define KURTE_HACKING
@@ -267,7 +270,8 @@ static const struct video_reg16 himax_qvga_regs[] = {
     {FRAME_LEN_LINES_L,     (HIMAX_FRAME_LENGTH_QVGA&0xFF)},
     {LINE_LEN_PCK_H,        (HIMAX_LINE_LEN_PCK_QVGA>>8)},
     {LINE_LEN_PCK_L,        (HIMAX_LINE_LEN_PCK_QVGA&0xFF)},
-    {GRP_PARAM_HOLD,        0x01},
+    //{BIT_CONTROL, 0x02},
+    //{GRP_PARAM_HOLD,        0x01},
     {0x0000,                0x00},  // EOF
 
 };
@@ -306,6 +310,9 @@ struct video_reg *hm01b0_init_regs[] = {
 	[RESOLUTION_160x120] = hm01b0_160x120_regs,
 	[RESOLUTION_320x240] = hm01b0_320x240_regs,
 	[RESOLUTION_320x320] = hm01b0_320x320_regs,
+	[RESOLUTION_160x120_44] = hm01b0_160x120_regs,
+	[RESOLUTION_326x244_44] = hm01b0_320x240_regs,
+	[RESOLUTION_320x320_44] = hm01b0_320x320_regs,
 };
 
 struct hm01b0_data {
@@ -339,6 +346,9 @@ static const struct video_format_cap hm01b0_fmts[] = {
 	HM01B0_VIDEO_FORMAT_CAP(160, 120, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 240, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 320, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(160, 120, VIDEO_PIX_FMT_GREY_44),
+	HM01B0_VIDEO_FORMAT_CAP(326, 244, VIDEO_PIX_FMT_GREY_44),
+	HM01B0_VIDEO_FORMAT_CAP(320, 320, VIDEO_PIX_FMT_GREY_44),
 	{0},
 };
 
@@ -348,7 +358,7 @@ static int hm01b0_apply_configuration(const struct device *dev, enum hm01b0_reso
 	const struct hm01b0_config *config = dev->config;
 	int ret;
 
-	printk("hm01b0_apply_configuration reset %p %u pwndn:%p %u\n", config->reset.port, config->reset.pin, 
+	printk("hm01b0_apply_configuration %u reset %p %u pwndn:%p %u\n", resolution, config->reset.port, config->reset.pin, 
 		config->pwdn.port, config->pwdn.pin);
 #ifdef KURTE_HACKING
 	if (resolution == RESOLUTION_320x240) {
@@ -358,6 +368,14 @@ static int hm01b0_apply_configuration(const struct device *dev, enum hm01b0_reso
 			return ret;
 		}
 	}
+
+	/* REG_BIT_CONTROL */
+	ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_BIT_CONTROL, data->ctrl_val);
+	if (ret != 0) {
+		LOG_ERR("Failed to write BIT_CONTROL reg (%d)", ret);
+		return ret;
+	}
+
 #else	
 	/* Number of registers is the same for all configuration */
 	ret = video_write_cci_multiregs(&config->i2c, hm01b0_init_regs[resolution],
@@ -386,13 +404,13 @@ static int hm01b0_apply_configuration(const struct device *dev, enum hm01b0_reso
 		LOG_ERR("Failed to write INTEGRATION_H reg (%d)", ret);
 		return ret;
 	}
+#endif	
 	/* GRP_PARAM_HOLD */
 	ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_GRP_PARAM_HOLD, 0x01);
 	if (ret != 0) {
 		LOG_ERR("Failed to write GRP_PARAM_HOLD reg (%d)", ret);
 		return ret;
 	}
-#endif	
 	return ret;
 }
 
@@ -572,13 +590,13 @@ static int hm01b0_init(const struct device *dev)
 
 #endif
 
-
+	uint32_t pixelformat = (config->data_bits == 4)? VIDEO_PIX_FMT_GREY : VIDEO_PIX_FMT_GREY;
 	struct video_format fmt = {
-		.pixelformat = VIDEO_PIX_FMT_GREY,
+		.pixelformat = pixelformat,
 		.width = 320,
 		.height = 240,
 		.type = VIDEO_BUF_TYPE_OUTPUT,
-		.pitch = 160 * video_bits_per_pixel(VIDEO_PIX_FMT_GREY) / BITS_PER_BYTE,
+		.pitch = 160 * video_bits_per_pixel(pixelformat) / BITS_PER_BYTE,
 	};
 
 	ret = hm01b0_set_fmt(dev, &fmt);

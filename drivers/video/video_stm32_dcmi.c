@@ -76,7 +76,9 @@ void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi)
 	}
 
 	vbuf->timestamp = k_uptime_get_32();
+	GPIOA->BSRR = (1 << 9); // turn on PA9 D14
 	memcpy(vbuf->buffer, dev_data->vbuf->buffer, vbuf->bytesused);
+	GPIOA->BSRR = (1 << 25); // turn on PA9 D14
 
 	k_fifo_put(&dev_data->fifo_out, vbuf);
 
