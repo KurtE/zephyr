@@ -43,6 +43,7 @@ enum hm01b0_resolution {
 	RESOLUTION_160x120,
 	RESOLUTION_320x240,
 	RESOLUTION_320x320,
+	RESOLUTION_326x244,
 	RESOLUTION_160x120_44,
 	RESOLUTION_326x244_44,
 	RESOLUTION_320x320_44,
@@ -310,6 +311,7 @@ struct video_reg *hm01b0_init_regs[] = {
 	[RESOLUTION_160x120] = hm01b0_160x120_regs,
 	[RESOLUTION_320x240] = hm01b0_320x240_regs,
 	[RESOLUTION_320x320] = hm01b0_320x320_regs,
+	[RESOLUTION_326x244] = hm01b0_320x240_regs,
 	[RESOLUTION_160x120_44] = hm01b0_160x120_regs,
 	[RESOLUTION_326x244_44] = hm01b0_320x240_regs,
 	[RESOLUTION_320x320_44] = hm01b0_320x320_regs,
@@ -346,6 +348,7 @@ static const struct video_format_cap hm01b0_fmts[] = {
 	HM01B0_VIDEO_FORMAT_CAP(160, 120, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 240, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 320, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(326, 244, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(160, 120, VIDEO_PIX_FMT_GREY_44),
 	HM01B0_VIDEO_FORMAT_CAP(326, 244, VIDEO_PIX_FMT_GREY_44),
 	HM01B0_VIDEO_FORMAT_CAP(320, 320, VIDEO_PIX_FMT_GREY_44),
@@ -358,8 +361,9 @@ static int hm01b0_apply_configuration(const struct device *dev, enum hm01b0_reso
 	const struct hm01b0_config *config = dev->config;
 	int ret;
 
-	printk("hm01b0_apply_configuration %u reset %p %u pwndn:%p %u\n", resolution, config->reset.port, config->reset.pin, 
-		config->pwdn.port, config->pwdn.pin);
+	//printk("hm01b0_apply_configuration %u reset %p %u pwndn:%p %u\n", resolution, config->reset.port, config->reset.pin, 
+	//	config->pwdn.port, config->pwdn.pin);
+	printk("hm01b0_apply_configuration %u reset %p %u\n", resolution, config->reset.port, config->reset.pin );
 #ifdef KURTE_HACKING
 	if (resolution == RESOLUTION_320x240) {
 		ret = video_write_cci_multiregs16(&config->i2c, himax_qvga_regs, ARRAY_SIZE(himax_qvga_regs));
