@@ -521,6 +521,35 @@ static bool hm01b0_check_connection(const struct device *dev)
 	return (model_id == HM01B0_ID);
 }
 
+
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+static bool hm01b0_try_reset_pwdn_pins(const struct device *dev, uint8_t iter) {
+	const struct hm01b0_config *config = dev->config;
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios)
+  gpio_pin_set_dt(&config->pwdn, iter >> 1);
+#else
+  if (iter >> 1) return false; /* cut iterations in half if not defined */
+#endif
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+	gpio_pin_set_dt(&config->reset, iter & 1);
+#else
+  if (iter & 1) return false; /* cut iterations in half if not defined */
+#endif
+    // lets try a couple of iterations before we punt
+	uint8_t retry_count = 3;
+	while (retry_count) {
+		k_sleep(K_MSEC(10));
+		if (hm01b0_check_connection(dev)) {
+			return true;
+		}
+		retry_count--;
+	}
+	return false;
+}
+#endif
+
 static int hm01b0_init(const struct device *dev)
 {
 	struct hm01b0_data *data = dev->data;
@@ -539,12 +568,7 @@ static int hm01b0_init(const struct device *dev)
 		return -ENODEV;
 	}
 
-	LOG_INF("hm01b0_init check connection");
-	if (!hm01b0_check_connection(dev)) {
-		LOG_ERR("%s is not ready", dev->name);
-		return -ENODEV;
-	}
-	LOG_INF("hm01b0_init PWDN and REST pins");
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios)
     /* Power up camera module */
     if (config->pwdn.port != NULL) {
@@ -557,7 +581,6 @@ static int hm01b0_init(const struct device *dev)
             return ret;
         }
     }
-  gpio_pin_set_dt(&config->pwdn, 1);
 #endif
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
     /* Reset camera module */
@@ -570,12 +593,21 @@ static int hm01b0_init(const struct device *dev)
             LOG_ERR("Could not set reset pin: %d", ret);
             return ret;
         }
-        /* Reset is active high, has 1ms settling time*/
-        k_msleep(1);
-        gpio_pin_set_dt(&config->reset, 0);
-        k_msleep(1);
     }
 #endif
+    bool found_id = false;
+    for (uint8_t iter = 0; iter < 4; iter++) {
+    	found_id = hm01b0_try_reset_pwdn_pins(dev, iter);
+    	if (found_id) break;
+    }
+#endif
+
+
+	LOG_INF("hm01b0_init check connection");
+	if (!hm01b0_check_connection(dev)) {
+		LOG_ERR("%s is not ready", dev->name);
+		return -ENODEV;
+	}
 
 	ret = hm01b0_soft_reset(dev);
 	if (ret != 0) {
@@ -628,10 +660,10 @@ static int hm01b0_init(const struct device *dev)
 		.i2c = I2C_DT_SPEC_INST_GET(inst), 							\
 		.data_bits = DT_INST_PROP(0, data_bits), /* Use only 1 pin for data */    \
 		HM01B0_RESET_GPIO(inst)                 \
-		HM01B0_PWDN_GPIO(inst)        \
-	};                                                                                         \
+		HM01B0_PWDN_GPIO(inst)};        \
 	struct hm01b0_data hm01b0_data_##inst;                                                     \
-	DEVICE_DT_INST_DEFINE(inst, &hm01b0_init, NULL, &hm01b0_data_##inst,                       \
+																								\
+	DEVICE_DT_INST_DEFINE(inst, hm01b0_init, NULL, &hm01b0_data_##inst,                       \
 			      &hm01b0_config_##inst, POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY,      \
 			      &hm01b0_driver_api);                                                 \
 	VIDEO_DEVICE_DEFINE(hm01b0_##inst, DEVICE_DT_INST_GET(inst), NULL);
