@@ -52,44 +52,44 @@ struct hm0360_data {
 #define         FRAME_COUNT_H                   0x0005
 #define         FRAME_COUNT_L                   0x0006
 #define         PIXEL_ORDER                     0x0007
-// Sensor mode control
+/* Sensor mode control */
 #define         MODE_SELECT                     0x0100
 #define         IMG_ORIENTATION                 0x0101
 #define         EMBEDDED_LINE_EN                0x0102
 #define         SW_RESET                        0x0103
 #define         COMMAND_UPDATE                  0x0104
-// Sensor exposure gain control
+/* Sensor exposure gain control */
 #define         INTEGRATION_H                   0x0202
 #define         INTEGRATION_L                   0x0203
 #define         ANALOG_GAIN                     0x0205
 #define         DIGITAL_GAIN_H                  0x020E
 #define         DIGITAL_GAIN_L                  0x020F
-// Clock control
+/* Clock control */
 #define         PLL1_CONFIG                     0x0300
 #define         PLL2_CONFIG                     0x0301
 #define         PLL3_CONFIG                     0x0302
-// Frame timing control
+/* Frame timing control */
 #define         FRAME_LEN_LINES_H               0x0340
 #define         FRAME_LEN_LINES_L               0x0341
 #define         LINE_LEN_PCK_H                  0x0342
 #define         LINE_LEN_PCK_L                  0x0343
-// Monochrome programming
+/* Monochrome programming */
 #define         MONO_MODE                       0x0370
 #define         MONO_MODE_ISP                   0x0371
 #define         MONO_MODE_SEL                   0x0372
-// Binning mode control
+/* Binning mode control */
 #define         H_SUBSAMPLE                     0x0380
 #define         V_SUBSAMPLE                     0x0381
 #define         BINNING_MODE                    0x0382
-// Test pattern control
+/* Test pattern control */
 #define         TEST_PATTERN_MODE               0x0601
-// Black level control
+/* Black level control */
 #define         BLC_TGT                         0x1004
 #define         BLC2_TGT                        0x1009
 #define         MONO_CTRL                       0x100A
-// VSYNC / HSYNC / pixel shift registers
+/* VSYNC / HSYNC / pixel shift registers  */
 #define         OPFM_CTRL                       0x1014
-// Tone mapping registers
+/* Tone mapping registers */
 #define         CMPRS_CTRL                      0x102F
 #define         CMPRS_01                        0x1030
 #define         CMPRS_02                        0x1031
@@ -107,7 +107,7 @@ struct hm0360_data {
 #define         CMPRS_14                        0x103D
 #define         CMPRS_15                        0x103E
 #define         CMPRS_16                        0x103F
-// Automatic exposure control
+/* Automatic exposure control */
 #define         AE_CTRL                         0x2000
 #define         AE_CTRL1                        0x2001
 #define         CNT_ORGH_H                      0x2002
@@ -145,13 +145,13 @@ struct hm0360_data {
 #define         AE_MEAN                         0x205D
 #define         AE_CONVERGE                     0x2060
 #define         AE_BLI_TGT                      0x2070
-// Interrupt control
+/* Interrupt control */
 #define         PULSE_MODE                      0x2061
 #define         PULSE_TH_H                      0x2062
 #define         PULSE_TH_L                      0x2063
 #define         INT_INDIC                       0x2064
 #define         INT_CLEAR                       0x2065
-// Motion detection control
+/* Motion detection control */
 #define         MD_CTRL                         0x2080
 #define         ROI_START_END_V                 0x2081
 #define         ROI_START_END_H                 0x2082
@@ -163,20 +163,20 @@ struct hm0360_data {
 #define         MD_LATENCY                      0x209C
 #define         MD_LATENCY_TH                   0x209D
 #define         MD_CTRL1                        0x209E
-// Context switch control registers
+/* Context switch control registers */
 #define         PMU_CFG_3                       0x3024
 #define         PMU_CFG_4                       0x3025
-// Operation mode control
+/* Operation mode control */
 #define         WIN_MODE                        0x3030
-// IO and clock control
+/* IO and clock control */
 #define         PAD_REGISTER_07                 0x3112
 
-// Register bits/values
+/* Register bits/values */
 #define         HIMAX_RESET                     0x01
 #define         HIMAX_MODE_STANDBY              0x00
-#define         HIMAX_MODE_STREAMING            0x01     // I2C triggered streaming enable
-#define         HIMAX_MODE_STREAMING_NFRAMES    0x03     // Output N frames
-#define         HIMAX_MODE_STREAMING_TRIG       0x05     // Hardware Trigger
+#define         HIMAX_MODE_STREAMING            0x01     /* I2C triggered streaming enable */
+#define         HIMAX_MODE_STREAMING_NFRAMES    0x03     /* Output N frames */
+#define         HIMAX_MODE_STREAMING_TRIG       0x05     /* Hardware Trigger */
 #define         HIMAX_SET_HMIRROR(r, x)         ((r&0xFE)|((x&1)<<0))
 #define         HIMAX_SET_VMIRROR(r, x)         ((r&0xFD)|((x&1)<<1))
 
@@ -203,7 +203,7 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {MONO_MODE_ISP, 0x01},
     {MONO_MODE_SEL, 0x01},
 
-    // BLC control
+    /* BLC control */
     {0x1000, 0x01},
     {0x1003, 0x04},
     {BLC_TGT, 0x04},
@@ -212,10 +212,10 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {BLC2_TGT, 0x04},
     {MONO_CTRL, 0x01},
 
-    // Output format control
+    /* Output format control */
     {OPFM_CTRL, 0x0C},
 
-    // Reserved regs
+    /* Reserved regs */
     {0x101D, 0x00},
     {0x101E, 0x01},
     {0x101F, 0x00},
@@ -240,28 +240,28 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {CMPRS_15, 0xCC},
     {CMPRS_16, 0xE6},
 
-    {0x3112, 0x00}, // PCLKO_polarity falling
+    {0x3112, 0x00}, /* PCLKO_polarity falling */
 
-    {PLL1_CONFIG, 0x08}, // Core = 24MHz PCLKO = 24MHz I2C = 12MHz
-    {PLL2_CONFIG, 0x0A}, // MIPI pre-dev (default)
-    {PLL3_CONFIG, 0x77}, // PMU/MIPI pre-dev (default)
+    {PLL1_CONFIG, 0x08}, /* Core = 24MHz PCLKO = 24MHz I2C = 12MHz */
+    {PLL2_CONFIG, 0x0A}, /* MIPI pre-dev (default) */
+    {PLL3_CONFIG, 0x77}, /* PMU/MIPI pre-dev (default) */
 
-    {PMU_CFG_3, 0x08},       // Disable context switching
-    {PAD_REGISTER_07, 0x00}, // PCLKO_polarity falling
+    {PMU_CFG_3, 0x08},       /* Disable context switching */
+    {PAD_REGISTER_07, 0x00}, /* PCLKO_polarity falling */
 
-    {AE_CTRL, 0x5F}, // Automatic Exposure (NOTE: Auto framerate enabled)
+    {AE_CTRL, 0x5F}, /* Automatic Exposure (NOTE: Auto framerate enabled) */
     {AE_CTRL1, 0x00},
-    {T_DAMPING, 0x20},       // AE T damping factor
-    {N_DAMPING, 0x00},       // AE N damping factor
-    {AE_TARGET_MEAN, 0x64},  // AE target
-    {AE_MIN_MEAN, 0x0A},     // AE min target mean
-    {AE_TARGET_ZONE, 0x23},  // AE target zone
-    {CONVERGE_IN_TH, 0x03},  // AE converge in threshold
-    {CONVERGE_OUT_TH, 0x05}, // AE converge out threshold
+    {T_DAMPING, 0x20},       /* AE T damping factor */
+    {N_DAMPING, 0x00},       /* AE N damping factor */
+    {AE_TARGET_MEAN, 0x64},  /* AE target */
+    {AE_MIN_MEAN, 0x0A},     /* AE min target mean */
+    {AE_TARGET_ZONE, 0x23},  /* AE target zone */
+    {CONVERGE_IN_TH, 0x03},  /* AE converge in threshold */
+    {CONVERGE_OUT_TH, 0x05}, /* AE converge out threshold */
     {MAX_INTG_H, (HIMAX_FRAME_LENGTH_QVGA - 4) >> 8},
     {MAX_INTG_L, (HIMAX_FRAME_LENGTH_QVGA - 4) & 0xFF},
 
-    {MAX_AGAIN, 0x04}, // Maximum analog gain
+    {MAX_AGAIN, 0x04}, /* Maximum analog gain */
     {MAX_DGAIN_H, 0x03},
     {MAX_DGAIN_L, 0x3F},
     {INTEGRATION_H, 0x01},
@@ -271,7 +271,7 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {MD_TH_MIN, 0x01},
     {MD_BLOCK_NUM_TH, 0x01},
     {MD_CTRL1, 0x06},
-    {PULSE_MODE, 0x00}, // Interrupt in level mode.
+    {PULSE_MODE, 0x00}, /* Interrupt in level mode. */
     {ROI_START_END_V, 0xF0},
     {ROI_START_END_H, 0xF0},
 
@@ -286,7 +286,7 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {IMG_ORIENTATION, 0x00},
     {COMMAND_UPDATE, 0x01},
 
-    /// SYNC function config.
+    /* SYNC function config. */
     {0x3010, 0x00},
     {0x3013, 0x01},
     {0x3019, 0x00},
@@ -294,7 +294,7 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {0x301B, 0x20},
     {0x301C, 0xFF},
 
-    // PREMETER config.
+    /* PREMETER config. */
     {0x3026, 0x03},
     {0x3027, 0x81},
     {0x3028, 0x01},
@@ -303,7 +303,7 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {0x302E, 0x00},
     {0x302F, 0x00},
 
-    // Magic regs 🪄.
+    /* Magic regs 🪄. */
     {0x302B, 0x2A},
     {0x302C, 0x00},
     {0x302D, 0x03},
@@ -477,8 +477,8 @@ static const struct hm0360_reg hm0360_default_regs[] = {
     {0x317D, 0x02},
     {0x318C, 0x00},
 
-    {0x310F, 0x00}, // puts it in 8bit mode
-    {0x3112, 0x04}, // was 0x0c
+    {0x310F, 0x00}, /* puts it in 8bit mode */
+    {0x3112, 0x04}, /* was 0x0c */
 
     {COMMAND_UPDATE, 0x01},
 };
@@ -522,7 +522,7 @@ static const struct hm0360_reg hm0360_qvga_regs[] = {
 };
 
 static const struct hm0360_reg hm0360_qqvga_regs[] = {
-    {PLL1_CONFIG, 0x09}, // Core = 12MHz PCLKO = 24MHz I2C = 12MHz
+    {PLL1_CONFIG, 0x09}, /* Core = 12MHz PCLKO = 24MHz I2C = 12MHz */
     {H_SUBSAMPLE, 0x02},
     {V_SUBSAMPLE, 0x02},
     {BINNING_MODE, 0x00},
@@ -612,19 +612,6 @@ static int hm0360_write_reg(const struct i2c_dt_spec *spec, const uint16_t addr,
 	return i2c_transfer_dt(spec, msg, 2);
 }
 
-static int hm0360_modify_reg(const struct i2c_dt_spec *spec, const uint16_t addr,
-			     const uint8_t mask, const uint8_t val)
-{
-	uint8_t regVal = 0;
-	int ret = hm0360_read_reg(spec, addr, &regVal, sizeof(regVal));
-
-	if (ret) {
-		return ret;
-	}
-
-	return hm0360_write_reg(spec, addr, (regVal & ~mask) | (val & mask));
-}
-
 static int hm0360_write_multi_regs(const struct i2c_dt_spec *spec, const struct hm0360_reg *regs,
 				   const uint32_t num_regs)
 {
@@ -654,7 +641,10 @@ static int hm0360_set_frmival(const struct device *dev, struct video_frmival *fr
   bool highres = false;
 
   ret = video_get_format(dev, &fmt);
-
+  if (ret < 0) {
+    LOG_ERR("Can not get video format");
+    return ret;
+  }
   /* Set output resolution */
 	while (fmts[i].pixelformat) {
 		if (fmts[i].width_min == fmt.width && fmts[i].height_min == fmt.height) {
@@ -666,13 +656,12 @@ static int hm0360_set_frmival(const struct device *dev, struct video_frmival *fr
 			case 320: /* QVGA */
         highres = false;
 				break;
-			default: /* VGA */
+      case 640: /* VGA */
         highres = true;
 				break;
-			}
-			if (ret < 0) {
+			default:
         LOG_ERR("Resolution not set!");
-				return ret;
+        return -ENOTSUP;
 			}
 		}
 		i++;
@@ -681,24 +670,24 @@ static int hm0360_set_frmival(const struct device *dev, struct video_frmival *fr
   drv_data->cur_frmrate = frmival->numerator ;
 
   if (frmival->numerator <= 10) {
-      osc_div = (highres == true) ? 0x03 : 0x03;
+      osc_div = 0x03;
   } else if (frmival->numerator <= 15) {
       osc_div = (highres == true) ? 0x02 : 0x03;
   } else if (frmival->numerator <= 30) {
       osc_div = (highres == true) ? 0x01 : 0x02;
   } else {
-      // Set to the max possible FPS at this resolution.
+      /* Set to the max possible FPS at this resolution. */
       osc_div = (highres == true) ? 0x00 : 0x01;
   }
 
   ret = hm0360_write_reg(&config->bus, PLL1_CONFIG, pll_cfg);
-  if(ret < 0) {
+  if(ret) {
     LOG_ERR("Could not read PLL1 Config");
     return ret;
   }
 
   ret = hm0360_write_reg(&config->bus, PLL1_CONFIG, (pll_cfg & 0xFC) | osc_div);
-  if(ret < 0) {
+  if(ret) {
     LOG_ERR("Could not set PLL1 Config");
     return ret;
   }
@@ -746,7 +735,7 @@ static int hm0360_set_fmt(const struct device *dev, struct video_format *fmt)
 	memcpy(&data->fmt, fmt, sizeof(data->fmt));
 
   k_msleep(300);
-  //Note: hm0360 only supports grayscale so pixelformat does not need to be set
+  /* Note: hm0360 only supports grayscale so pixelformat does not need to be set */
   LOG_INF("hm0360_set_fmt: W:%u H:%u fmt:%x", fmt->width, fmt->height, fmt->pixelformat);
 	/* Set output resolution */
 	while (fmts[i].pixelformat) {
@@ -885,7 +874,7 @@ static int hm0360_init(const struct device *dev)
 	/* Reset camera registers */
   ret = hm0360_write_reg(&config->bus, SW_RESET, HIMAX_RESET);
 
-	if (ret < 0) {
+	if (ret) {
 		LOG_ERR("Could not write reset: %d", ret);
 		return ret;
 	}
@@ -922,7 +911,7 @@ static int hm0360_set_stream(const struct device *dev, bool enable, enum video_b
 	const struct hm0360_config *config = dev->config;
 
   ret = hm0360_write_reg(&config->bus, MODE_SELECT, HIMAX_MODE_STREAMING);
-  if(ret < 0) {
+  if(ret) {
     LOG_ERR("Could not set streaming");
     return ret;
   }
@@ -947,12 +936,12 @@ static int hm0360_set_ctrl(const struct device *dev, uint32_t id)
     return ret;
 	case VIDEO_CID_HFLIP:
     ret = hm0360_read_reg(&config->bus, IMG_ORIENTATION, &data, sizeof(data));
-    ret = hm0360_write_reg(&config->bus, IMG_ORIENTATION, HIMAX_SET_HMIRROR(data, ctrls->hflip.val));
+    ret |= hm0360_write_reg(&config->bus, IMG_ORIENTATION, HIMAX_SET_HMIRROR(data, ctrls->hflip.val));
     ret |= hm0360_write_reg(&config->bus, COMMAND_UPDATE, 0x01);
     return ret;
 	case VIDEO_CID_VFLIP:
     ret = hm0360_read_reg(&config->bus, IMG_ORIENTATION, &data, sizeof(data));
-    ret = hm0360_write_reg(&config->bus, IMG_ORIENTATION, HIMAX_SET_VMIRROR(data, ctrls->vflip.val));
+    ret |= hm0360_write_reg(&config->bus, IMG_ORIENTATION, HIMAX_SET_VMIRROR(data, ctrls->vflip.val));
     ret |= hm0360_write_reg(&config->bus, COMMAND_UPDATE, 0x01);
     return ret;
 	default:
