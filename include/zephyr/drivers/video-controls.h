@@ -154,6 +154,7 @@ enum video_colorfx {
 
 /** Switch the camera between video mode and snapshot mode.
  * Defaults to video mode unless max buffer count is set to 1
+ * 1 - only stops HAL, 2 - also stops camera stream
  */
 
 #define VIDEO_CID_SNAPSHOT_MODE (VIDEO_CID_BASE + 34)
