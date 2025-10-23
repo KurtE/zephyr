@@ -6,6 +6,7 @@
 
 #define DT_DRV_COMPAT himax_hm01b0
 
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/drivers/video-controls.h>
 #include <zephyr/drivers/video.h>
@@ -48,6 +49,8 @@ enum hm01b0_resolution {
 	RESOLUTION_160x120,
 	RESOLUTION_320x240,
 	RESOLUTION_320x320,
+	RESOLUTION_324x244,
+	RESOLUTION_324x324,
 };
 
 struct video_reg hm01b0_160x120_regs[] = {
@@ -81,6 +84,8 @@ struct video_reg *hm01b0_init_regs[] = {
 	[RESOLUTION_160x120] = hm01b0_160x120_regs,
 	[RESOLUTION_320x240] = hm01b0_320x240_regs,
 	[RESOLUTION_320x320] = hm01b0_320x320_regs,
+	[RESOLUTION_324x244] = hm01b0_320x240_regs,
+	[RESOLUTION_324x324] = hm01b0_320x320_regs,
 };
 
 struct hm01b0_data {
@@ -91,6 +96,12 @@ struct hm01b0_config {
 	const struct i2c_dt_spec i2c;
 	const uint8_t data_bits;
 	const uint8_t ctrl_val;
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+	struct gpio_dt_spec reset;
+#endif
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios)
+	struct gpio_dt_spec pwdn;
+#endif
 };
 
 #define HM01B0_VIDEO_FORMAT_CAP(width, height, format)                                             \
@@ -108,6 +119,8 @@ static const struct video_format_cap hm01b0_fmts[] = {
 	HM01B0_VIDEO_FORMAT_CAP(160, 120, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 240, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 320, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(324, 244, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(324, 324, VIDEO_PIX_FMT_GREY),
 	{0},
 };
 
@@ -261,10 +274,84 @@ static bool hm01b0_check_connection(const struct device *dev)
 	return (model_id == HM01B0_ID);
 }
 
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+static bool hm01b0_try_reset_pwdn_pins(const struct device *dev, uint8_t iter)
+{
+	const struct hm01b0_config *config = dev->config;
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios)
+	gpio_pin_set_dt(&config->pwdn, iter >> 1);
+#else
+	if (iter >> 1) {
+		return false; /* cut iterations in half if not defined */
+	}
+#endif
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+	gpio_pin_set_dt(&config->reset, iter & 1);
+#else
+	if (iter & 1) {
+		return false; /* cut iterations in half if not defined */
+	}
+#endif
+	/* lets try a couple of iterations before we punt */
+	uint8_t retry_count = 3;
+
+	while (retry_count) {
+		k_sleep(K_MSEC(10));
+		if (hm01b0_check_connection(dev)) {
+			LOG_INF("Reset/pwdn pins valid:%u", retry_count);
+			return true;
+		}
+		retry_count--;
+	}
+	return false;
+}
+#endif
+
 static int hm01b0_init(const struct device *dev)
 {
+	const struct hm01b0_config *config = dev->config;
 	int ret;
 
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios)
+	/* Power up camera module */
+	if (config->pwdn.port != NULL) {
+		if (!gpio_is_ready_dt(&config->pwdn)) {
+			return -ENODEV;
+		}
+		ret = gpio_pin_configure_dt(&config->pwdn, GPIO_OUTPUT_ACTIVE);
+		if (ret < 0) {
+			LOG_ERR("Could not clear power down pin: %d", ret);
+			return ret;
+		}
+	}
+#endif
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+	/* Reset camera module */
+	if (config->reset.port != NULL) {
+		if (!gpio_is_ready_dt(&config->reset)) {
+			return -ENODEV;
+		}
+		ret = gpio_pin_configure_dt(&config->reset, GPIO_OUTPUT_ACTIVE);
+		if (ret < 0) {
+			LOG_ERR("Could not set reset pin: %d", ret);
+			return ret;
+		}
+	}
+#endif
+	bool found_id = false;
+
+	for (uint8_t iter = 0; iter < 4; iter++) {
+		found_id = hm01b0_try_reset_pwdn_pins(dev, iter);
+		if (found_id) {
+			break;
+		}
+	}
+#endif
+
+
+	LOG_INF("hm01b0_init check connection");
 	if (!hm01b0_check_connection(dev)) {
 		LOG_ERR("%s is not ready", dev->name);
 		return -ENODEV;
@@ -292,16 +379,30 @@ static int hm01b0_init(const struct device *dev)
 	return 0;
 }
 
-#define HM01B0_INIT(inst)                                                                          \
-	const struct hm01b0_config hm01b0_config_##inst = {                                        \
-		.i2c = I2C_DT_SPEC_INST_GET(inst),                                                 \
-		.data_bits = DT_INST_PROP(inst, data_bits),                                        \
-		.ctrl_val = HM01B0_CTRL_VAL(DT_INST_PROP(inst, data_bits)),                        \
-	};                                                                                         \
-	struct hm01b0_data hm01b0_data_##inst;                                                     \
-	DEVICE_DT_INST_DEFINE(inst, &hm01b0_init, NULL, &hm01b0_data_##inst,                       \
-			      &hm01b0_config_##inst, POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY,      \
-			      &hm01b0_driver_api);                                                 \
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
+#define HM01B0_RESET_GPIO(inst) .reset = GPIO_DT_SPEC_INST_GET_OR(inst, reset_gpios, {}),
+#else
+#define HM01B0_RESET_GPIO(inst)
+#endif
+
+#if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios)
+#define HM01B0_PWDN_GPIO(inst) .pwdn = GPIO_DT_SPEC_INST_GET_OR(inst, pwdn_gpios, {}),
+#else
+#define HM01B0_PWDN_GPIO(inst)
+#endif
+
+#define HM01B0_INIT(inst)                                                                       \
+	const struct hm01b0_config hm01b0_config_##inst = {                                     \
+		.i2c = I2C_DT_SPEC_INST_GET(inst),                                              \
+		.data_bits = DT_INST_PROP(inst, data_bits),                                     \
+		.ctrl_val = HM01B0_CTRL_VAL(DT_INST_PROP(inst, data_bits)),                     \
+		HM01B0_RESET_GPIO(inst)								\
+		HM01B0_PWDN_GPIO(inst)								\
+	};                                                                                      \
+	struct hm01b0_data hm01b0_data_##inst;                                                  \
+	DEVICE_DT_INST_DEFINE(inst, &hm01b0_init, NULL, &hm01b0_data_##inst,                    \
+			      &hm01b0_config_##inst, POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY,   \
+			      &hm01b0_driver_api);                                              \
 	VIDEO_DEVICE_DEFINE(hm01b0_##inst, DEVICE_DT_INST_GET(inst), NULL);
 
 DT_INST_FOREACH_STATUS_OKAY(HM01B0_INIT)
