@@ -16,6 +16,7 @@
 #include <zephyr/sys/util.h>
 
 #include "video_device.h"
+#include "video_ctrls.h"
 #include "video_common.h"
 
 LOG_MODULE_REGISTER(hm01b0, CONFIG_VIDEO_LOG_LEVEL);
@@ -27,6 +28,7 @@ LOG_MODULE_REGISTER(hm01b0, CONFIG_VIDEO_LOG_LEVEL);
 #define HM01B0_REG8(addr)             ((addr) | VIDEO_REG_ADDR16_DATA8)
 #define HM01B0_REG16(addr)            ((addr) | VIDEO_REG_ADDR16_DATA16_BE)
 #define HM01B0_CCI_ID                 HM01B0_REG16(0x0000)
+#define HM01B0_CCI_IMG_ORIENTATION    HM01B0_REG8(0x0101)
 #define HM01B0_CCI_STS                HM01B0_REG8(0x0100)
 #define HM01B0_CCI_RESET              HM01B0_REG8(0x0103)
 #define HM01B0_CCI_GRP_PARAM_HOLD     HM01B0_REG8(0x0104)
@@ -40,6 +42,9 @@ LOG_MODULE_REGISTER(hm01b0, CONFIG_VIDEO_LOG_LEVEL);
 #define HM01B0_CCI_BIT_CONTROL        HM01B0_REG8(0x3059)
 #define HM01B0_CCI_OSC_CLOCK_DIV      HM01B0_REG8(0x3060)
 
+#define HM01B0_SET_HMIRROR(r, x)      ((r & 0xFE) | ((x & 1) << 0))
+#define HM01B0_SET_VMIRROR(r, x)      ((r & 0xFD) | ((x & 1) << 1))
+
 #define HM01B0_CTRL_VAL(data_bits) \
 	((data_bits) == 8 ? 0x02 : \
 	(data_bits) == 4 ? 0x42 : \
@@ -49,8 +54,12 @@ enum hm01b0_resolution {
 	RESOLUTION_160x120,
 	RESOLUTION_320x240,
 	RESOLUTION_320x320,
-	RESOLUTION_324x244,
-	RESOLUTION_324x324,
+	RESOLUTION_164x122,
+	RESOLUTION_326x244,
+	RESOLUTION_326x324,
+	RESOLUTION_164x122_BAYER,
+	RESOLUTION_326x244_BAYER,
+	RESOLUTION_326x324_BAYER,
 };
 
 struct video_reg hm01b0_160x120_regs[] = {
@@ -84,11 +93,21 @@ struct video_reg *hm01b0_init_regs[] = {
 	[RESOLUTION_160x120] = hm01b0_160x120_regs,
 	[RESOLUTION_320x240] = hm01b0_320x240_regs,
 	[RESOLUTION_320x320] = hm01b0_320x320_regs,
-	[RESOLUTION_324x244] = hm01b0_320x240_regs,
-	[RESOLUTION_324x324] = hm01b0_320x320_regs,
+	[RESOLUTION_164x122] = hm01b0_160x120_regs,
+	[RESOLUTION_326x244] = hm01b0_320x240_regs,
+	[RESOLUTION_326x324] = hm01b0_320x320_regs,
+	[RESOLUTION_164x122_BAYER] = hm01b0_160x120_regs,
+	[RESOLUTION_326x244_BAYER] = hm01b0_320x240_regs,
+	[RESOLUTION_326x324_BAYER] = hm01b0_320x320_regs,
+};
+
+struct hm01b0_ctrls {
+	struct video_ctrl hflip;
+	struct video_ctrl vflip;
 };
 
 struct hm01b0_data {
+	struct hm01b0_ctrls ctrls;
 	struct video_format fmt;
 };
 
@@ -119,8 +138,12 @@ static const struct video_format_cap hm01b0_fmts[] = {
 	HM01B0_VIDEO_FORMAT_CAP(160, 120, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 240, VIDEO_PIX_FMT_GREY),
 	HM01B0_VIDEO_FORMAT_CAP(320, 320, VIDEO_PIX_FMT_GREY),
-	HM01B0_VIDEO_FORMAT_CAP(324, 244, VIDEO_PIX_FMT_GREY),
-	HM01B0_VIDEO_FORMAT_CAP(324, 324, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(164, 122, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(326, 244, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(326, 324, VIDEO_PIX_FMT_GREY),
+	HM01B0_VIDEO_FORMAT_CAP(164, 122, VIDEO_PIX_FMT_SBGGR8),
+	HM01B0_VIDEO_FORMAT_CAP(326, 324, VIDEO_PIX_FMT_SBGGR8),
+	HM01B0_VIDEO_FORMAT_CAP(326, 244, VIDEO_PIX_FMT_SBGGR8),
 	{0},
 };
 
@@ -252,9 +275,74 @@ static int hm01b0_soft_reset(const struct device *dev)
 	return ret;
 }
 
+static int hm01b0_init_controls(const struct device *dev)
+{
+	int ret;
+	struct hm01b0_data *drv_data = dev->data;
+	struct hm01b0_ctrls *ctrls = &drv_data->ctrls;
+
+	ret = video_init_ctrl(&ctrls->hflip, dev, VIDEO_CID_HFLIP,
+			      (struct video_ctrl_range){.min = 0, .max = 1, .step = 1, .def = 0});
+	if (ret) {
+		return ret;
+	}
+
+	return video_init_ctrl(&ctrls->vflip, dev, VIDEO_CID_VFLIP,
+			       (struct video_ctrl_range){.min = 0, .max = 1, .step = 1, .def = 0});
+}
+
+static int hm01b0_set_ctrl(const struct device *dev, uint32_t id)
+{
+	const struct hm01b0_config *config = dev->config;
+	struct hm01b0_data *drv_data = dev->data;
+	struct hm01b0_ctrls *ctrls = &drv_data->ctrls;
+
+	int ret;
+	uint32_t data;
+
+	switch (id) {
+	case VIDEO_CID_HFLIP:
+		ret = video_read_cci_reg(&config->i2c, HM01B0_CCI_IMG_ORIENTATION, &data);
+		if (ret < 0) {
+			return ret;
+		}
+		ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_IMG_ORIENTATION,
+					  HM01B0_SET_HMIRROR(data, ctrls->hflip.val));
+		if (ret < 0) {
+			return ret;
+		}
+		ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_GRP_PARAM_HOLD, 0x01);
+		if (ret < 0) {
+			return ret;
+		}
+		break;
+	case VIDEO_CID_VFLIP:
+		ret = video_read_cci_reg(&config->i2c, HM01B0_CCI_IMG_ORIENTATION, &data);
+		if (ret < 0) {
+			return ret;
+		}
+		ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_IMG_ORIENTATION,
+					  HM01B0_SET_VMIRROR(data, ctrls->vflip.val));
+		if (ret < 0) {
+			return ret;
+		}
+		ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_GRP_PARAM_HOLD, 0x01);
+		if (ret < 0) {
+			return ret;
+		}
+		break;
+	default:
+		return -ENOTSUP;
+	}
+
+	return 0;
+}
+
+
 static DEVICE_API(video, hm01b0_driver_api) = {
 	.set_format = hm01b0_set_fmt,
 	.get_format = hm01b0_get_fmt,
+	.set_ctrl = hm01b0_set_ctrl,
 	.set_stream = hm01b0_set_stream,
 	.get_caps = hm01b0_get_caps,
 };
@@ -310,7 +398,7 @@ static bool hm01b0_try_reset_pwdn_pins(const struct device *dev, uint8_t iter)
 
 static int hm01b0_init(const struct device *dev)
 {
-	const struct hm01b0_config *config = dev->config;
+	const struct hm01b0_config __maybe_unused *config = dev->config;
 	int ret;
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(pwdn_gpios) || DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
@@ -376,7 +464,9 @@ static int hm01b0_init(const struct device *dev)
 		return ret;
 	}
 
-	return 0;
+
+	/* Initialize controls */
+	return hm01b0_init_controls(dev);
 }
 
 #if DT_ANY_INST_HAS_PROP_STATUS_OKAY(reset_gpios)
