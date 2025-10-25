@@ -115,6 +115,7 @@ struct hm01b0_ctrls {
 struct hm01b0_data {
 	struct hm01b0_ctrls ctrls;
 	struct video_format fmt;
+	uint16_t cur_frmrate;
 };
 
 struct hm01b0_config {
@@ -284,6 +285,73 @@ static int hm01b0_soft_reset(const struct device *dev)
 	return ret;
 }
 
+static int hm01b0_set_frmival(const struct device *dev, struct video_frmival *frmival)
+{
+	const struct hm01b0_config *config = dev->config;
+	struct video_format fmt;
+	struct hm01b0_data *drv_data = dev->data;
+	int ret;
+
+	uint32_t osc_div = 0;
+	bool highres = false;
+
+	ret = hm01b0_get_fmt(dev, &fmt);
+	if (ret < 0) {
+		LOG_ERR("Can not get format!");
+		return ret;
+	}
+
+	if (fmt.width == 320) {
+		highres = true;
+	}
+
+
+	if (frmival->numerator <= 15) {
+		osc_div = highres ? 0x01 : 0x00;
+	} else if (frmival->numerator <= 30) {
+		osc_div = highres ? 0x02 : 0x01;
+	} else if (frmival->numerator <= 60) {
+		osc_div = highres ? 0x03 : 0x02;
+	} else {
+		/* Set to the max possible FPS at this resolution. */
+		osc_div = 3;
+	}
+
+	osc_div |= 0x8;
+
+	ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_OSC_CLOCK_DIV, osc_div);
+	if (ret < 0) {
+		LOG_ERR("Failed to write OSC_CLK_DIV = %x reg (%d)", osc_div, ret);
+		return ret;
+	}
+
+	/* GRP_PARAM_HOLD */
+	ret = video_write_cci_reg(&config->i2c, HM01B0_CCI_GRP_PARAM_HOLD, 0x01);
+	if (ret < 0) {
+		LOG_ERR("Failed to write GRP_PARAM_HOLD reg (%d)", ret);
+		return ret;
+	}
+
+
+	drv_data->cur_frmrate = frmival->numerator;
+
+	LOG_DBG("FrameRate selected: %d", frmival->numerator);
+	LOG_DBG("HIRES Selected: %d", highres);
+	LOG_DBG("OSC DIV: %d", osc_div);
+
+	return 0;
+}
+
+static int hm01b0_get_frmival(const struct device *dev, struct video_frmival *frmival)
+{
+	struct hm01b0_data *drv_data = dev->data;
+
+	frmival->numerator = drv_data->cur_frmrate;
+	frmival->denominator = 1;
+
+	return 0;
+}
+
 static int hm01b0_init_controls(const struct device *dev)
 {
 	int ret;
@@ -354,6 +422,8 @@ static DEVICE_API(video, hm01b0_driver_api) = {
 	.set_ctrl = hm01b0_set_ctrl,
 	.set_stream = hm01b0_set_stream,
 	.get_caps = hm01b0_get_caps,
+	.set_frmival = hm01b0_set_frmival,
+	.get_frmival = hm01b0_get_frmival,
 };
 
 static bool hm01b0_check_connection(const struct device *dev)
