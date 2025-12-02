@@ -7,6 +7,8 @@
 #include <mem.h>
 #include <st/h7/stm32h747.dtsi>
 
+/delete-node/ &itcm;
+/delete-node/ &dtcm;
 /delete-node/ &flash0;
 
 / {
